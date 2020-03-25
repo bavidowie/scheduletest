@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Доска задач</title>
+    <link rel="stylesheet" href="vendor/bootstrap-4.4.1-dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="vendor/DataTables/datatables.min.css"/>
+
+    <link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="container">
+    <div class="row auth">
+        <div class="col-6"></div>
+        <div class="col-2">
+            <input type="text" class="form-control" id="login_username" placeholder="Логин">
+        </div>
+        <div class="col-2">
+            <input type="password" class="form-control" id="login_password" placeholder="Пароль">
+        </div>
+        <div class="col-2">
+            <input type="button" class="btn btn-info btn-block login_submit" value="Войти">
+        </div>
+    </div>
+    <div class="row unauth hidden">
+        <div class="col-6"></div>
+        <div class="col-4 greetings"></div>
+        <div class="col-2">
+            <input type="button" class="btn btn-info btn-block logout" value="Выйти">
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-6"></div>
+        <div class="col-6 hidden wronglogin alert alert-danger">
+            Неправильное имя пользователя или пароль
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-12">
+            <h1>Доска задач</h1>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-12">
+            <table class="table table-bordered assignments">
+                <thead>
+                <tr>
+                    <th>Имя пользователя</th>
+                    <th>E-mail</th>
+                    <th>Текст задачи</th>
+                    <th>Статус</th>
+                </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-12">
+            <h3>Создание новой задачи</h3>
+        </div>
+    </div>
+    <form class="needs-validation" novalidate name="new_assignment">
+        <div class="form-row">
+            <div class="col-2 form-group">
+                <label for="new_username">Имя пользователя</label>
+                <input type="text" class="form-control" id="new_username" name="username" required>
+                <div class="invalid-feedback">
+                    Введите имя пользователя
+                </div>
+            </div>
+            <div class="col-2 form-group">
+                <label for="new_email">E-mail</label>
+                <input type="email" class="form-control" id="new_email" name="email" required>
+                <div class="invalid-feedback">
+                    Введите корректный E-mail
+                </div>
+            </div>
+            <div class="col-6 form-group">
+                <label for="new_details">Текст задачи</label>
+                <textarea class="form-control" id="new_details" cols="30" rows="3" name="details" required></textarea>
+                <div class="invalid-feedback">
+                    Введите текст задачи
+                </div>
+            </div>
+            <div class="col-2 form-group">
+                <label for="new_details">&nbsp;</label>
+                <input class="btn btn-info btn-block submit_task" type="submit" value="Создать" id="submit_task">
+            </div>
+        </div>
+    </form>
+    <div class="alert alert-success hidden"></div>
+
+</div>
+<script src="vendor/jquery-3.4.1.min.js"></script>
+<script src="vendor/DataTables/datatables.min.js"></script>
+<script>
+
+    document.addEventListener('DOMContentLoaded', function () {
+        let Table;
+        Table = $(".assignments").DataTable({
+            ajax: "api.php",
+            filter: false,
+            lengthMenu: [[3]],
+            bLengthChange: false,
+            columnDefs: [
+                {targets: [0], data: 'username'},
+                {targets: [1], data: 'email'},
+                {targets: [2], data: 'details', render: function ( data, type, row ) {
+                    let logged_in = localStorage.getItem('logged_in');
+                    let edit_btn =  logged_in ?
+                        `<div>
+                            <button class="btn btn-info btn-sm pull-right assignment_edit" id="edit_${row.id}">
+                            Редактировать</button>
+                            <button class="btn btn-success btn-sm pull-right assignment_save hidden" id="save_${row.id}">
+                            Сохранить</button>
+                        </div>` : '';
+                    return `<p id="details_${row.id}">${data}</p>` + edit_btn;
+                }},
+                {targets: [3], data: 'status', render: function ( data, type, row ) {
+                    let disabled = localStorage.getItem('logged_in') ? '' : 'disabled';
+                    return `<input type="checkbox" class="dbl_checkbox assignment_status" ${data ? 'checked' : ''} ${disabled} id="status_${row.id}"> `;
+                }}
+            ],
+            language: {url: 'vendor/DataTables/Russian.json'},
+            drawCallback: () => {
+                let checkboxes = document.getElementsByClassName('assignment_status');
+                for (let checkbox of checkboxes) {
+                    checkbox.addEventListener('change', () => {
+                        changeAssignmentStatus(checkbox);
+                    });
+                }
+                let edit_btns = document.getElementsByClassName('assignment_edit');
+                for (let btn of edit_btns) {
+                    btn.addEventListener('click', () => {
+                        editAssignmentDetails(btn);
+                    });
+                }
+                let save_btns = document.getElementsByClassName('assignment_save');
+                for (let btn of save_btns) {
+                    btn.addEventListener('click', () => {
+                        saveAssignmentDetails(btn);
+                    });
+                }
+            }
+        });
+
+        function changeAssignmentStatus(checkbox) {
+            let confirm = checkbox.checked;
+            let assignment_id = checkbox.id.split('_')[1];
+            let status = confirm ? 1 : 0;
+            let data = {
+                action: 'status',
+                assignment_id: assignment_id,
+                status: status
+            };
+            fetch('api.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+        }
+
+        function editAssignmentDetails(btn) {
+            let assignment_id = btn.id.split('_')[1];
+            let details_shown = document.querySelector(`#details_${assignment_id}`);
+            let details_old = details_shown.innerHTML;
+            details_shown.classList.add('hidden');
+            details_shown.insertAdjacentHTML('afterend',
+                `<textarea class="form-control" id="editdetails_${assignment_id}" cols="30" rows="3">${details_old}</textarea>`);
+            document.querySelector(`#edit_${assignment_id}`).classList.add('hidden');
+            document.querySelector(`#save_${assignment_id}`).classList.remove('hidden');
+        }
+
+        function saveAssignmentDetails(btn) {
+            let assignment_id = btn.id.split('_')[1];
+            let details_new = document.querySelector(`#editdetails_${assignment_id}`).value;
+            let data = {
+                action: 'details',
+                id: assignment_id,
+                details: details_new
+            };
+            fetch('api.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                showMessage(result);
+                btn.classList.add('hidden');
+                document.querySelector(`#edit_${assignment_id}`).classList.remove('hidden');
+            });
+        }
+
+        let form = document.querySelector('.needs-validation');
+        form.addEventListener('submit', function(event) {
+            event.preventDefault();
+            form.classList.add('was-validated');
+            if (form.checkValidity() === false) {
+                event.stopPropagation();
+            } else {
+                let data = {
+                    action: 'add',
+                    username: document.forms.new_assignment.username.value,
+                    email: document.forms.new_assignment.email.value,
+                    details: document.forms.new_assignment.details.value
+                };
+                fetch('api.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                })
+                    .then(response => response.json())
+                    .then(result => showMessage(result));
+            }
+        }, false);
+
+        function showMessage(result) {
+            let alert = document.querySelector('.alert-success');
+            alert.innerHTML = result.message;
+            if (result.hasOwnProperty('error')) {
+                alert.classList.remove('alert-success');
+                alert.classList.add('alert-danger');
+            } else {
+                alert.classList.remove('alert-danger');
+                alert.classList.add('alert-success');
+            }
+            alert.classList.remove('hidden');
+            Table.ajax.reload();
+        }
+
+        let login_btn = document.querySelector('.login_submit');
+        login_btn.addEventListener('click', () => {
+            let data  = {
+                action: 'login',
+                login: document.getElementById('login_username').value,
+                password: document.getElementById('login_password').value
+            };
+            fetch('auth.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+                .then(response => response.json())
+                .then((result) => {
+                    if (result.logged_in !== null) {
+                        document.querySelector('.wronglogin').classList.add('hidden');
+                        localStorage.setItem('logged_in', result.logged_in);
+                        displayAdminPanel(result.logged_in);
+                        Table.ajax.reload();
+                    } else {
+                        document.querySelector('.wronglogin').classList.remove('hidden');
+                    }
+                });
+        });
+        let logout_btn = document.querySelector('.logout');
+        logout_btn.addEventListener('click', () => {
+            localStorage.removeItem('logged_in');
+            hideAdminPanel();
+            Table.ajax.reload();
+            fetch('auth.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ action: 'logout' })
+            });
+        });
+
+        let username = localStorage.getItem('logged_in');
+        if (username !== null) {
+            displayAdminPanel(username);
+        }
+
+        function displayAdminPanel(username) {
+            document.querySelector('.auth').classList.add('hidden');
+            document.querySelector('.unauth').classList.remove('hidden');
+            document.querySelector('.greetings').innerHTML = `Здравствуйте, ${username}!`;
+        }
+        function hideAdminPanel() {
+            document.querySelector('.auth').classList.remove('hidden');
+            document.querySelector('.unauth').classList.add('hidden');
+            document.querySelector('.greetings').innerHTML = '';
+        }
+    });
+
+</script>
+</body>
+</html>
