@@ -110,12 +110,13 @@
                     let logged_in = localStorage.getItem('logged_in');
                     let edit_btn =  logged_in ?
                         `<div>
-                            <button class="btn btn-info btn-sm pull-right assignment_edit" id="edit_${row.id}">
+                            <button class="btn btn-info btn-sm assignment_edit" id="edit_${row.id}">
                             Редактировать</button>
-                            <button class="btn btn-success btn-sm pull-right assignment_save hidden" id="save_${row.id}">
+                            <button class="btn btn-success btn-sm assignment_save hidden" id="save_${row.id}">
                             Сохранить</button>
                         </div>` : '';
-                    return `<p id="details_${row.id}">${data}</p>` + edit_btn;
+                    let edited_mark = row.edited === 1 ? 'Отредактировано' : '';
+                    return `<p id="details_${row.id}">${data}</p>` + edited_mark + edit_btn;
                 }},
                 {targets: [3], data: 'status', render: function ( data, type, row ) {
                     let disabled = localStorage.getItem('logged_in') ? '' : 'disabled';
